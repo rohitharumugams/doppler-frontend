@@ -28,9 +28,12 @@ export const ApiService = {
     }
   },
 
-  getPaths: async () => {
+  getPaths: async (vehicleType) => {
     try {
-      const response = await apiClient.get(API_ENDPOINTS.PATHS);
+      const url = vehicleType 
+        ? `${API_ENDPOINTS.PATHS}?vehicle_type=${vehicleType}`
+        : API_ENDPOINTS.PATHS;
+      const response = await apiClient.get(url);
       return { success: true, data: response.data };
     } catch (error) {
       return { success: false, error: error.message };

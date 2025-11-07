@@ -23,7 +23,7 @@ export default function PathSelectionScreen({ route, navigation }) {
   const loadPaths = async () => {
     setLoading(true);
     
-    const pathsResponse = await ApiService.getPaths();
+    const pathsResponse = await ApiService.getPaths(vehicle.id);
     if (pathsResponse.success) {
       setPaths(pathsResponse.data.paths);
       if (pathsResponse.data.paths.length > 0) {
