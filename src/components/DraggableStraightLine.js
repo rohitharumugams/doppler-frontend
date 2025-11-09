@@ -11,41 +11,41 @@ export default function DraggableStraightLine({ parameters, onParametersChange }
   const centerX = CANVAS_WIDTH / 2;
   const centerY = CANVAS_HEIGHT / 2;
 
-  // Convert parameters to canvas coordinates
+  // Convert parameters to match backend physics
   const hValue = parseFloat(parameters.h) || 10;
   const angleValue = parseFloat(parameters.angle) || 0;
   const angleRad = (angleValue * Math.PI) / 180;
 
-  // Calculate line endpoints based on h and angle
-  const lineLength = 100; // visual length on canvas
+  // The vehicle moves along a straight line
+  // The line is at perpendicular distance h from observer
+  // For visualization, we show a horizontal line at distance h
+  // The angle rotates this line around the observer
   
-  // Perpendicular line to observer at distance h
-  const perpX = Math.sin(angleRad) * hValue * SCALE;
-  const perpY = -Math.cos(angleRad) * hValue * SCALE;
+  // Calculate the perpendicular point (closest approach to observer)
+  const closestX = hValue * Math.sin(angleRad);
+  const closestY = hValue * Math.cos(angleRad);
   
-  // Line endpoints perpendicular to the radial direction
-  const lineStartX = centerX + perpX - Math.cos(angleRad) * lineLength;
-  const lineStartY = centerY + perpY - Math.sin(angleRad) * lineLength;
-  const lineEndX = centerX + perpX + Math.cos(angleRad) * lineLength;
-  const lineEndY = centerY + perpY + Math.sin(angleRad) * lineLength;
-
-  // Draggable point on the line (closest point to observer)
-  const [dragPointX, setDragPointX] = useState(centerX + perpX);
-  const [dragPointY, setDragPointY] = useState(centerY + perpY);
+  // Line extends in both directions perpendicular to the radial direction
+  const lineExtent = 100; // visual length
+  const lineStartX = centerX + closestX - Math.cos(angleRad) * lineExtent;
+  const lineStartY = centerY - closestY + Math.sin(angleRad) * lineExtent;
+  const lineEndX = centerX + closestX + Math.cos(angleRad) * lineExtent;
+  const lineEndY = centerY - closestY - Math.sin(angleRad) * lineExtent;
 
   const panResponder = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderMove: (evt, gestureState) => {
-        const newX = dragPointX + gestureState.dx;
-        const newY = dragPointY + gestureState.dy;
+        // Get touch position relative to canvas
+        const touchX = gestureState.moveX - gestureState.x0 + (centerX + closestX);
+        const touchY = gestureState.moveY - gestureState.y0 + (centerY - closestY);
         
-        // Calculate new h and angle from drag position
-        const dx = newX - centerX;
-        const dy = newY - centerY;
+        // Calculate new h and angle from touch position
+        const dx = touchX - centerX;
+        const dy = centerY - touchY; // Flip Y for standard math coordinates
         const newH = Math.sqrt(dx * dx + dy * dy) / SCALE;
-        const newAngle = Math.atan2(dx, -dy) * (180 / Math.PI);
+        const newAngle = Math.atan2(dx, dy) * (180 / Math.PI);
         
         // Clamp values
         const clampedH = Math.max(1, Math.min(100, newH));
@@ -57,11 +57,8 @@ export default function DraggableStraightLine({ parameters, onParametersChange }
           angle: clampedAngle.toFixed(1)
         });
       },
-      onPanResponderRelease: (evt, gestureState) => {
-        const newX = dragPointX + gestureState.dx;
-        const newY = dragPointY + gestureState.dy;
-        setDragPointX(newX);
-        setDragPointY(newY);
+      onPanResponderRelease: () => {
+        // Nothing needed here - state already updated
       }
     })
   ).current;
@@ -90,8 +87,8 @@ export default function DraggableStraightLine({ parameters, onParametersChange }
           <Line 
             x1={centerX} 
             y1={centerY} 
-            x2={centerX + perpX} 
-            y2={centerY + perpY} 
+            x2={centerX + closestX * SCALE} 
+            y2={centerY - closestY * SCALE} 
             stroke="#9C27B0" 
             strokeWidth="2" 
             strokeDasharray="5,5" 
@@ -103,27 +100,17 @@ export default function DraggableStraightLine({ parameters, onParametersChange }
           {/* Draggable point (closest approach) */}
           <G {...panResponder.panHandlers}>
             <Circle 
-              cx={centerX + perpX} 
-              cy={centerY + perpY} 
+              cx={centerX + closestX * SCALE} 
+              cy={centerY - closestY * SCALE} 
               r="20" 
               fill="#4CAF50" 
               opacity="0.3"
             />
             <Circle 
-              cx={centerX + perpX} 
-              cy={centerY + perpY} 
+              cx={centerX + closestX * SCALE} 
+              cy={centerY - closestY * SCALE} 
               r="12" 
               fill="#4CAF50" 
-            />
-          </G>
-          
-          {/* Vehicle icon */}
-          <G>
-            <Circle 
-              cx={centerX + perpX - Math.cos(angleRad) * 50} 
-              cy={centerY + perpY - Math.sin(angleRad) * 50} 
-              r="10" 
-              fill="#2196F3" 
             />
           </G>
         </Svg>
