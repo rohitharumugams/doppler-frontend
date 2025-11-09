@@ -9,9 +9,13 @@ import {
   Alert
 } from 'react-native';
 import PathVisualizer from '../components/PathVisualizer';
+import DraggableStraightLine from '../components/DraggableStraightLine';
 
 export default function ParametersScreen({ route, navigation }) {
   const { vehicle, path } = route.params;
+  
+  // Toggle between drag mode and manual input mode
+  const [isManualMode, setIsManualMode] = useState(false);
   
   // State for all possible parameters
   const [parameters, setParameters] = useState({
@@ -146,13 +150,92 @@ export default function ParametersScreen({ route, navigation }) {
         <Text style={styles.sectionTitle}>📝 Set Parameters</Text>
         <Text style={styles.sectionSubtitle}>{path.description}</Text>
 
-        {/* LIVE PATH VISUALIZATION */}
-        <PathVisualizer pathType={path.id} parameters={parameters} />
+        {/* Mode Toggle Button - Only for straight line */}
+        {path.id === 'straight' && (
+          <TouchableOpacity 
+            style={styles.modeToggle}
+            onPress={() => setIsManualMode(!isManualMode)}
+          >
+            <Text style={styles.modeToggleText}>
+              {isManualMode ? '🎯 Switch to Drag Mode' : '⌨️ Switch to Manual Input'}
+            </Text>
+          </TouchableOpacity>
+        )}
 
-        {/* Dynamic Parameter Inputs */}
+        {/* Drag Mode or PathVisualizer */}
+        {path.id === 'straight' && !isManualMode ? (
+          <DraggableStraightLine 
+            parameters={parameters}
+            onParametersChange={setParameters}
+          />
+        ) : (
+          <PathVisualizer pathType={path.id} parameters={parameters} />
+        )}
+
+        {/* Speed and Duration inputs - always visible */}
         <View style={styles.parametersContainer}>
-          {getRequiredParameters().map(param => renderParameterInput(param))}
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>SPEED <Text style={styles.unit}>(m/s)</Text></Text>
+            <TextInput
+              style={styles.input}
+              value={parameters.speed}
+              onChangeText={(value) => updateParameter('speed', value)}
+              keyboardType="numeric"
+              placeholder="Enter speed"
+            />
+            <Text style={styles.hint}>Range: 1 - 100</Text>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.label}>DURATION <Text style={styles.unit}>(seconds)</Text></Text>
+            <TextInput
+              style={styles.input}
+              value={parameters.audio_duration}
+              onChangeText={(value) => updateParameter('audio_duration', value)}
+              keyboardType="numeric"
+              placeholder="Enter duration"
+            />
+            <Text style={styles.hint}>Range: 1 - 30</Text>
+          </View>
         </View>
+
+        {/* Manual mode inputs - only show if manual mode OR not straight line */}
+        {(isManualMode || path.id !== 'straight') && (
+          <View style={styles.parametersContainer}>
+            {path.id === 'straight' && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>H <Text style={styles.unit}>(m - distance)</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parameters.h}
+                    onChangeText={(value) => updateParameter('h', value)}
+                    keyboardType="numeric"
+                    placeholder="Enter h"
+                  />
+                  <Text style={styles.hint}>Range: 1 - 100</Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>ANGLE <Text style={styles.unit}>(degrees)</Text></Text>
+                  <TextInput
+                    style={styles.input}
+                    value={parameters.angle}
+                    onChangeText={(value) => updateParameter('angle', value)}
+                    keyboardType="numeric"
+                    placeholder="Enter angle"
+                  />
+                  <Text style={styles.hint}>Range: -45 - 45</Text>
+                </View>
+              </>
+            )}
+            
+            {path.id !== 'straight' && getRequiredParameters()
+              .filter(p => p.name !== 'audio_duration' && p.name !== 'speed')
+              .map(param => renderParameterInput(param))
+            }
+          </View>
+        )}
 
         {/* Quick Presets */}
         <View style={styles.presetContainer}>
@@ -275,6 +358,23 @@ const styles = StyleSheet.create({
     color: '#666',
     marginBottom: 20,
     fontStyle: 'italic',
+  },
+  modeToggle: {
+    backgroundColor: '#FF9800',
+    padding: 12,
+    borderRadius: 10,
+    marginBottom: 20,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  modeToggleText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: 'bold',
   },
   parametersContainer: {
     backgroundColor: '#fff',
