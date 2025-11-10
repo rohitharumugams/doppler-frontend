@@ -23,7 +23,6 @@ export default function SimulationScreen({ route, navigation }) {
   const startSimulation = async () => {
     setStatus('Sending request to server...');
     
-    // Start simulation
     const result = await ApiService.startSimulation(parameters);
     
     if (!result.success) {
@@ -44,7 +43,6 @@ export default function SimulationScreen({ route, navigation }) {
     setJobId(job_id);
     setStatus('Processing Doppler effect...');
     
-    // Start polling for job status
     pollJobStatus(job_id);
   };
 
@@ -59,28 +57,20 @@ export default function SimulationScreen({ route, navigation }) {
 
       const jobData = result.data;
       
-      // Update status
       if (jobData.status === 'processing') {
         setStatus('Processing audio...');
         setProgress(jobData.progress || 50);
-        
-        // Continue polling
         setTimeout(() => checkStatus(), POLLING_INTERVAL);
       } 
       else if (jobData.status === 'completed') {
-        setStatus('Simulation complete!');
-        setProgress(100);
-        
-        // Navigate to result screen
-        setTimeout(() => {
-          navigation.replace('Result', {
-            vehicle,
-            path,
-            parameters,
-            result: jobData.result,
-            jobId: jobId
-          });
-        }, 1000);
+        // No "Simulation complete!" banner — go straight to Result
+        navigation.replace('Result', {
+          vehicle,
+          path,
+          parameters,
+          result: jobData.result,
+          jobId: jobId
+        });
       } 
       else if (jobData.status === 'failed') {
         Alert.alert(
@@ -96,23 +86,19 @@ export default function SimulationScreen({ route, navigation }) {
       }
     };
 
-    // Start checking
     checkStatus();
   };
 
   return (
     <View style={styles.container}>
       <View style={styles.content}>
-        {/* Animation Icon */}
         <View style={styles.iconContainer}>
           <Text style={styles.icon}>🔊</Text>
           <ActivityIndicator size="large" color="#2196F3" style={styles.spinner} />
         </View>
 
-        {/* Status Text */}
         <Text style={styles.statusText}>{status}</Text>
         
-        {/* Progress */}
         {progress > 0 && (
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
@@ -121,32 +107,7 @@ export default function SimulationScreen({ route, navigation }) {
             <Text style={styles.progressText}>{progress}%</Text>
           </View>
         )}
-
-        {/* Info */}
-        <View style={styles.infoContainer}>
-          <InfoRow label="Vehicle" value={vehicle.name} />
-          <InfoRow label="Path" value={path.name} />
-          <InfoRow label="Speed" value={`${parameters.speed} m/s`} />
-          <InfoRow label="Duration" value={`${parameters.audio_duration}s`} />
-        </View>
-
-        {/* Fun fact */}
-        <View style={styles.tipContainer}>
-          <Text style={styles.tipIcon}>💡</Text>
-          <Text style={styles.tipText}>
-            The Doppler effect was named after Austrian physicist Christian Doppler who proposed it in 1842!
-          </Text>
-        </View>
       </View>
-    </View>
-  );
-}
-
-function InfoRow({ label, value }) {
-  return (
-    <View style={styles.infoRow}>
-      <Text style={styles.infoLabel}>{label}:</Text>
-      <Text style={styles.infoValue}>{value}</Text>
     </View>
   );
 }
@@ -164,7 +125,7 @@ const styles = StyleSheet.create({
   },
   iconContainer: {
     position: 'relative',
-    marginBottom: 40,
+    marginBottom: 32,
     width: 120,
     height: 120,
     justifyContent: 'center',
@@ -179,15 +140,14 @@ const styles = StyleSheet.create({
     height: 100,
   },
   statusText: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 30,
+    marginBottom: 24,
     textAlign: 'center',
   },
   progressContainer: {
-    width: '100%',
-    marginBottom: 30,
+    width: '84%',
   },
   progressBar: {
     width: '100%',
@@ -195,7 +155,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#e0e0e0',
     borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 10,
+    marginBottom: 8,
   },
   progressFill: {
     height: '100%',
@@ -203,47 +163,8 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   progressText: {
-    fontSize: 16,
-    color: '#666',
-    textAlign: 'center',
-  },
-  infoContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    width: '100%',
-    marginBottom: 20,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
-  infoLabel: {
-    fontSize: 16,
-    color: '#666',
-  },
-  infoValue: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#333',
-  },
-  tipContainer: {
-    backgroundColor: '#E3F2FD',
-    borderRadius: 12,
-    padding: 15,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    width: '100%',
-  },
-  tipIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  tipText: {
-    flex: 1,
     fontSize: 14,
     color: '#666',
-    lineHeight: 20,
+    textAlign: 'center',
   },
 });

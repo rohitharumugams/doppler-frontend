@@ -213,6 +213,7 @@ const styles = StyleSheet.create({
   },
   bottomContainer: {
     padding: 20,
+    paddingBottom: 40,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',

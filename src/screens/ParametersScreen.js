@@ -1,3 +1,5 @@
+// parameterscreen.js
+
 import React, { useState } from 'react';
 import {
   View,
@@ -7,10 +9,12 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
+  Platform,
 } from 'react-native';
 import PathVisualizer from '../components/PathVisualizer';
 import DraggableStraightLine from '../components/DraggableStraightLine';
 import DraggableBezier from '../components/DraggableBezier';
+import DraggableParabola from '../components/DraggableParabola';
 
 export default function ParametersScreen({ route, navigation }) {
   const { vehicle, path } = route.params;
@@ -18,15 +22,18 @@ export default function ParametersScreen({ route, navigation }) {
   // Toggle between drag mode and manual input (per screen)
   const [isManualMode, setIsManualMode] = useState(false);
 
-  // Persist zoom for draggable visuals
-  const [dragScale, setDragScale] = useState(2);
+  // Persist zoom for draggable visuals (shared across interactive canvases)
+  const [dragScale, setDragScale] = useState(1);
 
   // Parameters (strings by default for inputs)
   const [parameters, setParameters] = useState({
     speed: '20',
+    // straight / parabola shared 'h'
     h: '10',
     angle: '0',
+    // parabola curvature
     a: '0.1',
+    // bezier points
     x0: '-30',
     y0: '20',
     x1: '-10',
@@ -74,7 +81,6 @@ export default function ParametersScreen({ route, navigation }) {
 
     for (let param of requiredParams) {
       const raw = parameters[param.name];
-      // Accept numbers from draggers and strings from inputs
       const str = raw === undefined || raw === null ? '' : String(raw);
       if (str.trim() === '') {
         Alert.alert('Error', `Please enter ${param.name}`);
@@ -138,32 +144,25 @@ export default function ParametersScreen({ route, navigation }) {
 
   const isStraight = path.id === 'straight';
   const isBezier = path.id === 'bezier';
+  const isParabola = path.id === 'parabola';
+  const isInteractive = isStraight || isBezier || isParabola;
 
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Info Cards */}
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Vehicle:</Text>
-          <Text style={styles.infoValue}>{vehicle.name}</Text>
-        </View>
+        {/* Headers intentionally removed */}
 
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Path Type:</Text>
-          <Text style={styles.infoValue}>{path.name}</Text>
-        </View>
-
-        <Text style={styles.sectionTitle}>📝 Set Parameters</Text>
+        <Text style={styles.sectionTitle}>Set Parameters</Text>
         <Text style={styles.sectionSubtitle}>{path.description}</Text>
 
         {/* Toggle only for interactive paths */}
-        {(isStraight || isBezier) && (
+        {isInteractive && (
           <TouchableOpacity
             style={styles.modeToggle}
             onPress={() => setIsManualMode((m) => !m)}
           >
             <Text style={styles.modeToggleText}>
-              {isManualMode ? '🎯 Switch to Drag Mode' : '⌨️ Switch to Manual Input'}
+              {isManualMode ? 'Switch to Drag Mode' : 'Switch to Manual Input'}
             </Text>
           </TouchableOpacity>
         )}
@@ -187,8 +186,17 @@ export default function ParametersScreen({ route, navigation }) {
           />
         )}
 
+        {isParabola && !isManualMode && (
+          <DraggableParabola
+            parameters={parameters}
+            onParametersChange={handleParamChange}
+            scale={dragScale}
+            onScaleChange={setDragScale}
+          />
+        )}
+
         {/* Fallback visualizer when manual or other paths */}
-        {(!isStraight && !isBezier) || isManualMode ? (
+        {(!isInteractive) || isManualMode ? (
           <PathVisualizer pathType={path.id} parameters={parameters} />
         ) : null}
 
@@ -224,7 +232,7 @@ export default function ParametersScreen({ route, navigation }) {
         </View>
 
         {/* Manual inputs for interactive paths, or all inputs for non-interactive */}
-        {(isManualMode || (!isStraight && !isBezier)) && (
+        {(isManualMode || !isInteractive) && (
           <View style={styles.parametersContainer}>
             {isStraight && (
               <>
@@ -289,16 +297,47 @@ export default function ParametersScreen({ route, navigation }) {
               </>
             )}
 
+            {isParabola && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>
+                    A <Text style={styles.unit}>(curvature)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={String(parameters.a)}
+                    onChangeText={(value) => updateParameter('a', value)}
+                    keyboardType="numeric"
+                    placeholder="Enter a"
+                  />
+                  <Text style={styles.hint}>Suggested: 0.00 – 0.50</Text>
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>
+                    H <Text style={styles.unit}>(vertex height)</Text>
+                  </Text>
+                  <TextInput
+                    style={styles.input}
+                    value={String(parameters.h)}
+                    onChangeText={(value) => updateParameter('h', value)}
+                    keyboardType="numeric"
+                    placeholder="Enter h"
+                  />
+                  <Text style={styles.hint}>Suggested: 0 – 100</Text>
+                </View>
+              </>
+            )}
+
             {/* Non-interactive paths get their dynamic form from backend */}
-            {!isStraight &&
-              !isBezier &&
+            {!isInteractive &&
               getRequiredParameters()
                 .filter((p) => p.name !== 'audio_duration' && p.name !== 'speed')
                 .map((param) => renderParameterInput(param))}
           </View>
         )}
 
-        {/* Quick Presets (for straight only, as before) */}
+        {/* Quick Presets */}
         <View style={styles.presetContainer}>
           <Text style={styles.presetTitle}>Quick Presets:</Text>
           <View style={styles.presetButtons}>
@@ -327,6 +366,15 @@ export default function ParametersScreen({ route, navigation }) {
                     y2: '-10',
                     x3: '30',
                     y3: '20',
+                  }));
+                }
+                if (isParabola) {
+                  setParameters((prev) => ({
+                    ...prev,
+                    speed: '20',
+                    audio_duration: '5',
+                    a: '0.10',
+                    h: '10',
                   }));
                 }
               }}
@@ -361,6 +409,15 @@ export default function ParametersScreen({ route, navigation }) {
                     y3: '15',
                   }));
                 }
+                if (isParabola) {
+                  setParameters((prev) => ({
+                    ...prev,
+                    speed: '30',
+                    audio_duration: '3',
+                    a: '0.15',
+                    h: '8',
+                  }));
+                }
               }}
             >
               <Text style={styles.presetButtonText}>Fast</Text>
@@ -393,6 +450,15 @@ export default function ParametersScreen({ route, navigation }) {
                     y3: '25',
                   }));
                 }
+                if (isParabola) {
+                  setParameters((prev) => ({
+                    ...prev,
+                    speed: '10',
+                    audio_duration: '8',
+                    a: '0.05',
+                    h: '20',
+                  }));
+                }
               }}
             >
               <Text style={styles.presetButtonText}>Slow</Text>
@@ -403,37 +469,34 @@ export default function ParametersScreen({ route, navigation }) {
         <View style={styles.tipContainer}>
           <Text style={styles.tipIcon}>💡</Text>
           <Text style={styles.tipText}>
-            For Bezier: P1 and P4 are endpoints; P2 and P3 are control points shaping the curve.
+            For Bezier: P1 and P4 are endpoints; P2 and P3 are control points shaping the curve. For Parabola: drag the green vertex to change H, use the A slider for curvature.
           </Text>
         </View>
+
+        {/* Spacer so last content isn't hidden behind sticky footer */}
+        <View style={styles.stickySpacer} />
       </ScrollView>
 
-      <View style={styles.bottomContainer}>
+      {/* Sticky CTA at bottom */}
+      <View style={styles.stickyFooter}>
         <TouchableOpacity style={styles.simulateButton} onPress={validateAndContinue}>
-          <Text style={styles.simulateButtonText}>🚀 Start Simulation</Text>
+          <Text style={styles.simulateButtonText}>Start Simulation</Text>
         </TouchableOpacity>
       </View>
     </View>
   );
 }
 
+const FOOTER_HEIGHT = 88 + (Platform.OS === 'ios' ? 6 : 0);
+
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  scrollView: { flex: 1 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  infoCard: {
-    backgroundColor: '#fff',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
+  container: { 
+    flex: 1, 
+    backgroundColor: '#f5f5f5',
+    paddingBottom: 100,    // THIS fills the transparent area
   },
-  infoLabel: { fontSize: 14, color: '#666' },
-  infoValue: { fontSize: 16, fontWeight: 'bold', color: '#333' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 24 },
   sectionTitle: { fontSize: 22, fontWeight: 'bold', color: '#333', marginTop: 20, marginBottom: 10 },
   sectionSubtitle: { fontSize: 14, color: '#666', marginBottom: 20, fontStyle: 'italic' },
   modeToggle: {
@@ -477,7 +540,31 @@ const styles = StyleSheet.create({
   tipContainer: { backgroundColor: '#FFF9C4', borderRadius: 12, padding: 15, flexDirection: 'row', alignItems: 'flex-start' },
   tipIcon: { fontSize: 24, marginRight: 10 },
   tipText: { flex: 1, fontSize: 14, color: '#666', lineHeight: 20 },
-  bottomContainer: { padding: 20, backgroundColor: '#fff', borderTopWidth: 1, borderTopColor: '#e0e0e0' },
+
+  // Legacy CTA container no longer used (kept in case you revert)
+  ctaContainer: {
+    marginTop: 8,
+    marginBottom: 24,
+  },
+
+  // Sticky footer + spacer
+  stickyFooter: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 20,        // keep this as it is (your chosen lift)
+    paddingHorizontal: 20,
+    paddingTop: 10,
+    paddingBottom: 10,
+    backgroundColor: 'rgba(245,245,245,1)',   // fully opaque
+    height: 90,                                 // extends container without lifting the button
+    borderTopWidth: 1,
+    borderTopColor: '#ddd',
+  },
+  stickySpacer: {
+    height: FOOTER_HEIGHT + 28,
+  },
+
   simulateButton: {
     backgroundColor: '#FF5722',
     padding: 16,

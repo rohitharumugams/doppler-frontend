@@ -2,6 +2,7 @@ import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
+import { TouchableOpacity, Text } from 'react-native';
 
 // Import screens
 import HomeScreen from './src/screens/HomeScreen';
@@ -51,7 +52,19 @@ export default function App() {
         <Stack.Screen 
           name="Result" 
           component={ResultScreen}
-          options={{ title: 'Simulation Result' }}
+          options={({ navigation }) => ({
+            title: 'Simulation Result',
+            headerRight: () => (
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Home')}
+                style={{ marginRight: 14 }}
+                accessibilityLabel="New Simulation"
+              >
+                {/* Larger icon as requested */}
+                <Text style={{ fontSize: 28 }}>🔄</Text>
+              </TouchableOpacity>
+            ),
+          })}
         />
       </Stack.Navigator>
     </NavigationContainer>

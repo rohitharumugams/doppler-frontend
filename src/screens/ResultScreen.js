@@ -22,13 +22,12 @@ export default function ResultScreen({ route, navigation }) {
 
   useEffect(() => {
     loadAudio();
-    
     return () => {
-      // Cleanup
       if (sound) {
         sound.unloadAsync();
       }
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadAudio = async () => {
@@ -48,9 +47,9 @@ export default function ResultScreen({ route, navigation }) {
         onPlaybackStatusUpdate
       );
       
+      await newSound.setProgressUpdateIntervalAsync(8); // or 33 for ~30fps
       setSound(newSound);
       
-      // Get duration
       const status = await newSound.getStatusAsync();
       if (status.isLoaded) {
         setDuration(status.durationMillis / 1000);
@@ -64,12 +63,9 @@ export default function ResultScreen({ route, navigation }) {
     if (status.isLoaded) {
       setPosition(status.positionMillis / 1000);
       setIsPlaying(status.isPlaying);
-      
-      // Update animation progress (0 to 1)
       if (status.durationMillis > 0) {
         setAnimationProgress(status.positionMillis / status.durationMillis);
       }
-      
       if (status.didJustFinish) {
         setIsPlaying(false);
         setPosition(0);
@@ -80,7 +76,6 @@ export default function ResultScreen({ route, navigation }) {
 
   const playPauseAudio = async () => {
     if (!sound) return;
-
     if (isPlaying) {
       await sound.pauseAsync();
     } else {
@@ -90,7 +85,6 @@ export default function ResultScreen({ route, navigation }) {
 
   const stopAudio = async () => {
     if (!sound) return;
-    
     await sound.stopAsync();
     await sound.setPositionAsync(0);
     setPosition(0);
@@ -104,36 +98,13 @@ export default function ResultScreen({ route, navigation }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  const handleNewSimulation = () => {
-    if (sound) {
-      sound.unloadAsync();
-    }
-    navigation.navigate('Home');
-  };
-
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* Success Header */}
-        <View style={styles.successHeader}>
-          <Text style={styles.successIcon}>✅</Text>
-          <Text style={styles.successTitle}>Simulation Complete!</Text>
-          <Text style={styles.successSubtitle}>Your Doppler effect audio is ready</Text>
-        </View>
-
-        {/* ANIMATED PATH VISUALIZATION */}
-        <PathVisualizer 
-          pathType={path.id} 
-          parameters={parameters}
-          isAnimating={isPlaying}
-          animationProgress={animationProgress}
-        />
-
-        {/* Audio Player */}
+        {/* AUDIO PLAYER MOVED UP */}
         <View style={styles.playerContainer}>
           <Text style={styles.playerTitle}>🎵 Audio Player</Text>
-          
-          {/* Waveform Visualization (simplified) */}
+
           <View style={styles.waveform}>
             <View style={styles.waveformBar} />
             <View style={[styles.waveformBar, styles.waveformBarTall]} />
@@ -145,7 +116,6 @@ export default function ResultScreen({ route, navigation }) {
             <View style={[styles.waveformBar, styles.waveformBarShort]} />
           </View>
 
-          {/* Progress Bar */}
           <View style={styles.progressContainer}>
             <View style={styles.progressBar}>
               <View 
@@ -161,7 +131,6 @@ export default function ResultScreen({ route, navigation }) {
             </View>
           </View>
 
-          {/* Control Buttons */}
           <View style={styles.controls}>
             <TouchableOpacity 
               style={styles.controlButton}
@@ -193,12 +162,18 @@ export default function ResultScreen({ route, navigation }) {
           </View>
         </View>
 
-        {/* Simulation Details */}
+        {/* VISUALIZER BELOW PLAYER */}
+        <PathVisualizer 
+          pathType={path.id} 
+          parameters={parameters}
+          isAnimating={isPlaying}
+          animationProgress={animationProgress}
+        />
+
+        {/* SIMULATION DETAILS (Vehicle/PathType removed) */}
         <View style={styles.detailsContainer}>
           <Text style={styles.detailsTitle}>📊 Simulation Details</Text>
-          
-          <DetailRow label="Vehicle" value={vehicle.name} />
-          <DetailRow label="Path Type" value={path.name} />
+
           <DetailRow label="Speed" value={`${parameters.speed} m/s`} />
           <DetailRow label="Duration" value={`${result.duration.toFixed(2)}s`} />
           
@@ -216,25 +191,16 @@ export default function ResultScreen({ route, navigation }) {
           )}
         </View>
 
-        {/* Info Box */}
         <View style={styles.infoBox}>
           <Text style={styles.infoIcon}>ℹ️</Text>
           <Text style={styles.infoText}>
-            The frequency increases as the vehicle approaches and decreases as it moves away. 
-            This is the Doppler effect in action!
+            The frequency increases as the vehicle approaches and decreases as it moves away.
           </Text>
         </View>
-      </ScrollView>
 
-      {/* Bottom Buttons */}
-      <View style={styles.bottomContainer}>
-        <TouchableOpacity 
-          style={styles.newSimButton}
-          onPress={handleNewSimulation}
-        >
-          <Text style={styles.newSimButtonText}>🔄 New Simulation</Text>
-        </TouchableOpacity>
-      </View>
+        {/* No bottom New Simulation button; headerRight handles it */}
+        <View style={{ height: 12 }} />
+      </ScrollView>
     </View>
   );
 }
@@ -249,40 +215,15 @@ function DetailRow({ label, value }) {
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  scrollView: {
-    flex: 1,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  successHeader: {
-    alignItems: 'center',
-    marginBottom: 30,
-  },
-  successIcon: {
-    fontSize: 64,
-    marginBottom: 10,
-  },
-  successTitle: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginBottom: 5,
-  },
-  successSubtitle: {
-    fontSize: 16,
-    color: '#666',
-  },
+  container: { flex: 1, backgroundColor: '#f5f5f5' },
+  scrollView: { flex: 1 },
+  scrollContent: { padding: 20, paddingBottom: 20 },
+
   playerContainer: {
     backgroundColor: '#fff',
     borderRadius: 16,
     padding: 20,
-    marginBottom: 20,
+    marginBottom: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -293,7 +234,7 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 20,
+    marginBottom: 16,
     textAlign: 'center',
   },
   waveform: {
@@ -301,7 +242,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-around',
     alignItems: 'flex-end',
     height: 60,
-    marginBottom: 20,
+    marginBottom: 16,
   },
   waveformBar: {
     width: 6,
@@ -309,36 +250,26 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
     borderRadius: 3,
   },
-  waveformBarTall: {
-    height: 50,
-  },
-  waveformBarShort: {
-    height: 20,
-  },
-  progressContainer: {
-    marginBottom: 20,
-  },
+  waveformBarTall: { height: 50 },
+  waveformBarShort: { height: 20 },
+
+  progressContainer: { marginBottom: 16 },
   progressBar: {
     width: '100%',
     height: 6,
     backgroundColor: '#e0e0e0',
     borderRadius: 3,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   progressFill: {
     height: '100%',
     backgroundColor: '#2196F3',
     borderRadius: 3,
   },
-  timeContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  timeText: {
-    fontSize: 12,
-    color: '#666',
-  },
+  timeContainer: { flexDirection: 'row', justifyContent: 'space-between' },
+  timeText: { fontSize: 12, color: '#666' },
+
   controls: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -353,29 +284,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  controlButtonText: {
-    fontSize: 24,
-  },
+  controlButtonText: { fontSize: 24 },
   playButton: {
     width: 70,
     height: 70,
     borderRadius: 35,
     backgroundColor: '#2196F3',
   },
-  playButtonText: {
-    fontSize: 32,
-  },
+  playButtonText: { fontSize: 32 },
+
   detailsContainer: {
     backgroundColor: '#fff',
     borderRadius: 12,
     padding: 20,
-    marginBottom: 20,
+    marginTop: 8,
+    marginBottom: 16,
   },
   detailsTitle: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 12,
   },
   detailRow: {
     flexDirection: 'row',
@@ -384,15 +313,9 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#f0f0f0',
   },
-  detailLabel: {
-    fontSize: 14,
-    color: '#666',
-  },
-  detailValue: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#333',
-  },
+  detailLabel: { fontSize: 14, color: '#666' },
+  detailValue: { fontSize: 14, fontWeight: 'bold', color: '#333' },
+
   infoBox: {
     backgroundColor: '#E8F5E9',
     borderRadius: 12,
@@ -400,36 +323,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'flex-start',
   },
-  infoIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  infoText: {
-    flex: 1,
-    fontSize: 14,
-    color: '#666',
-    lineHeight: 20,
-  },
-  bottomContainer: {
-    padding: 20,
-    backgroundColor: '#fff',
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
-  },
-  newSimButton: {
-    backgroundColor: '#4CAF50',
-    padding: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 4,
-    elevation: 5,
-  },
-  newSimButtonText: {
-    color: '#fff',
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  infoIcon: { fontSize: 20, marginRight: 10 },
+  infoText: { flex: 1, fontSize: 14, color: '#666', lineHeight: 20 },
 });
