@@ -1,117 +1,178 @@
-import React, { useState, useRef } from 'react';
+import React, { useRef, useState, useMemo } from 'react';
 import { View, Text, StyleSheet, PanResponder, Dimensions } from 'react-native';
-import Svg, { Line, Circle, G, Path } from 'react-native-svg';
+import Slider from '@react-native-community/slider';
+import Svg, { Line, Circle, G } from 'react-native-svg';
 
 const { width: screenWidth } = Dimensions.get('window');
 const CANVAS_WIDTH = screenWidth - 40;
 const CANVAS_HEIGHT = 400;
-const SCALE = 5; // pixels per meter
 
-export default function DraggableStraightLine({ parameters, onParametersChange }) {
+export default function DraggableStraightLine({ parameters, onParametersChange, scale: scaleProp, onScaleChange }) {
+  // Canvas frame
   const centerX = CANVAS_WIDTH / 2;
   const centerY = CANVAS_HEIGHT / 2;
 
-  // Convert parameters to match backend physics
-  const hValue = parseFloat(parameters.h) || 10;
-  const angleValue = parseFloat(parameters.angle) || 0;
-  const angleRad = (angleValue * Math.PI) / 180;
+  // Zoom (slider) — controlled if props provided; otherwise local state
+  const [internalScale, setInternalScale] = useState(5);
+  const controlled = typeof scaleProp === 'number' && typeof onScaleChange === 'function';
+  const scale = controlled ? scaleProp : internalScale;
+  const setScale = controlled ? onScaleChange : setInternalScale;
 
-  // The vehicle moves along a straight line
-  // The line is at perpendicular distance h from observer
-  // For visualization, we show a horizontal line at distance h
-  // The angle rotates this line around the observer
-  
-  // Calculate the perpendicular point (closest approach to observer)
-  const closestX = hValue * Math.sin(angleRad);
-  const closestY = hValue * Math.cos(angleRad);
-  
-  // Line extends in both directions perpendicular to the radial direction
-  const lineExtent = 100; // visual length
-  const lineStartX = centerX + closestX - Math.cos(angleRad) * lineExtent;
-  const lineStartY = centerY - closestY + Math.sin(angleRad) * lineExtent;
-  const lineEndX = centerX + closestX + Math.cos(angleRad) * lineExtent;
-  const lineEndY = centerY - closestY - Math.sin(angleRad) * lineExtent;
+  // Controlled values from parent (strings or numbers → numbers)
+  const h = useMemo(() => Number(parameters?.h ?? 10), [parameters?.h]);
+  const angleDeg = useMemo(() => Number(parameters?.angle ?? 0), [parameters?.angle]);
+  const speed = useMemo(() => Number(parameters?.speed ?? 20), [parameters?.speed]);
+  const duration = useMemo(() => Number(parameters?.audio_duration ?? 5), [parameters?.audio_duration]);
 
-  const panResponder = useRef(
+  const angleRad = (angleDeg * Math.PI) / 180;
+
+  // World coords with +Y up (observer at 0,0)
+  // Closest point from observer to path
+  const closestX = h * Math.sin(angleRad);
+  const closestY = h * Math.cos(angleRad);
+
+  const lineExtent = (speed * duration) / 2;
+  const dirX = Math.cos(angleRad);
+  const dirY = Math.sin(angleRad);
+
+  const lineStartX = closestX - dirX * lineExtent;
+  const lineStartY = closestY - dirY * lineExtent;
+  const lineEndX   = closestX + dirX * lineExtent;
+  const lineEndY   = closestY + dirY * lineExtent;
+
+  // world ↔ canvas
+  const wx2cx = (x) => centerX + x * scale;
+  const wy2cy = (y) => centerY - y * scale; // invert Y for canvas
+
+  // Drag state capturing initial handle positions to avoid drift
+  const dragState = useRef({
+    startH: h,
+    baseEndX: lineEndX,
+    baseEndY: lineEndY,
+  });
+
+  const oneFinger = (evt) => evt.nativeEvent.touches.length === 1;
+
+  // GREEN handle: adjust h along outward normal n = (sinθ, cosθ)
+  const midpointPanResponder = useRef(
     PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder: () => true,
-      onPanResponderMove: (evt, gestureState) => {
-        // Get touch position relative to canvas
-        const touchX = gestureState.moveX - gestureState.x0 + (centerX + closestX);
-        const touchY = gestureState.moveY - gestureState.y0 + (centerY - closestY);
-        
-        // Calculate new h and angle from touch position
-        const dx = touchX - centerX;
-        const dy = centerY - touchY; // Flip Y for standard math coordinates
-        const newH = Math.sqrt(dx * dx + dy * dy) / SCALE;
-        const newAngle = Math.atan2(dx, dy) * (180 / Math.PI);
-        
-        // Clamp values
-        const clampedH = Math.max(1, Math.min(100, newH));
-        const clampedAngle = Math.max(-45, Math.min(45, newAngle));
-        
-        onParametersChange({
-          ...parameters,
-          h: clampedH.toFixed(1),
-          angle: clampedAngle.toFixed(1)
-        });
+      onStartShouldSetPanResponder: oneFinger,
+      onMoveShouldSetPanResponder: oneFinger,
+      onPanResponderGrant: () => {
+        dragState.current.startH = h;
       },
-      onPanResponderRelease: () => {
-        // Nothing needed here - state already updated
-      }
+      onPanResponderMove: (_, gestureState) => {
+        const dxw = gestureState.dx / scale;
+        const dyw = -gestureState.dy / scale;
+
+        const nx = Math.sin(angleRad);
+        const ny = Math.cos(angleRad);
+        const radialMovement = dxw * nx + dyw * ny;
+
+        const newH = Math.max(0.1, Math.min(1000, dragState.current.startH + radialMovement));
+
+        // IMPORTANT: only send the changed key using a function updater
+        onParametersChange?.((prev) => ({
+          ...prev,
+          h: Number(newH.toFixed(2)),
+        }));
+      },
+    })
+  ).current;
+
+  // ORANGE handle: rotate angle by dragging the endpoint around the closest point
+  const endpointPanResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: oneFinger,
+      onMoveShouldSetPanResponder: oneFinger,
+      onPanResponderGrant: () => {
+        // capture the endpoint at the start of the drag (world coords)
+        dragState.current.baseEndX = lineEndX;
+        dragState.current.baseEndY = lineEndY;
+      },
+      onPanResponderMove: (_, gestureState) => {
+        const dxw = gestureState.dx / scale;
+        const dyw = -gestureState.dy / scale;
+
+        const newEndX = dragState.current.baseEndX + dxw;
+        const newEndY = dragState.current.baseEndY + dyw;
+
+        const vx = newEndX - closestX;
+        const vy = newEndY - closestY;
+
+        let newAngle = (Math.atan2(vy, vx) * 180) / Math.PI; // CCW from +X
+        // normalize to [-180,180]
+        if (newAngle > 180) newAngle -= 360;
+        if (newAngle < -180) newAngle += 360;
+        // clamp softly to [-45,45]
+        newAngle = Math.max(-45, Math.min(45, newAngle));
+
+        onParametersChange?.((prev) => ({
+          ...prev,
+          angle: Number(newAngle.toFixed(2)),
+        }));
+      },
     })
   ).current;
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>🎯 Drag the Line to Adjust Path</Text>
-      
+      <Text style={styles.title}>Drag Dots • Use slider to zoom</Text>
+
+      {/* Zoom slider */}
+      <View style={styles.sliderRow}>
+        <Text style={styles.sliderLabel}>Zoom</Text>
+        <Slider
+          style={{ flex: 1, height: 36 }}
+          minimumValue={0.1}
+          maximumValue={15}
+          step={0.1}
+          value={scale}
+          onValueChange={setScale}
+        />
+        <Text style={styles.sliderValue}>{scale.toFixed(1)}x</Text>
+      </View>
+
       <View style={styles.canvasContainer}>
         <Svg width={CANVAS_WIDTH} height={CANVAS_HEIGHT}>
-          {/* Grid background */}
-          <Line x1="0" y1={centerY} x2={CANVAS_WIDTH} y2={centerY} stroke="#e0e0e0" strokeWidth="1" strokeDasharray="5,5" />
-          <Line x1={centerX} y1="0" x2={centerX} y2={CANVAS_HEIGHT} stroke="#e0e0e0" strokeWidth="1" strokeDasharray="5,5" />
-          
-          {/* Vehicle path line */}
-          <Line 
-            x1={lineStartX} 
-            y1={lineStartY} 
-            x2={lineEndX} 
-            y2={lineEndY} 
-            stroke="#2196F3" 
-            strokeWidth="4" 
+          {/* Axes through observer (centered on Y-axis as requested) */}
+          <Line x1="0" y1={wy2cy(0)} x2={CANVAS_WIDTH} y2={wy2cy(0)} stroke="#e0e0e0" strokeWidth="1" strokeDasharray="5,5" />
+          <Line x1={wx2cx(0)} y1="0" x2={wx2cx(0)} y2={CANVAS_HEIGHT} stroke="#e0e0e0" strokeWidth="1" strokeDasharray="5,5" />
+
+          {/* Path segment (time-symmetric around closest approach) */}
+          <Line
+            x1={wx2cx(lineStartX)}
+            y1={wy2cy(lineStartY)}
+            x2={wx2cx(lineEndX)}
+            y2={wy2cy(lineEndY)}
+            stroke="#2196F3"
+            strokeWidth="4"
           />
-          
-          {/* Perpendicular distance indicator */}
-          <Line 
-            x1={centerX} 
-            y1={centerY} 
-            x2={centerX + closestX * SCALE} 
-            y2={centerY - closestY * SCALE} 
-            stroke="#9C27B0" 
-            strokeWidth="2" 
-            strokeDasharray="5,5" 
+
+          {/* Observer → closest point line */}
+          <Line
+            x1={wx2cx(0)}
+            y1={wy2cy(0)}
+            x2={wx2cx(closestX)}
+            y2={wy2cy(closestY)}
+            stroke="#9C27B0"
+            strokeWidth="2"
+            strokeDasharray="5,5"
           />
-          
-          {/* Observer (you) */}
-          <Circle cx={centerX} cy={centerY} r="12" fill="#FF5722" />
-          
-          {/* Draggable point (closest approach) */}
-          <G {...panResponder.panHandlers}>
-            <Circle 
-              cx={centerX + closestX * SCALE} 
-              cy={centerY - closestY * SCALE} 
-              r="20" 
-              fill="#4CAF50" 
-              opacity="0.3"
-            />
-            <Circle 
-              cx={centerX + closestX * SCALE} 
-              cy={centerY - closestY * SCALE} 
-              r="12" 
-              fill="#4CAF50" 
-            />
+
+          {/* Observer */}
+          <Circle cx={wx2cx(0)} cy={wy2cy(0)} r="12" fill="#FF5722" />
+
+          {/* GREEN handle (distance) */}
+          <G {...midpointPanResponder.panHandlers}>
+            <Circle cx={wx2cx(closestX)} cy={wy2cy(closestY)} r="20" fill="#4CAF50" opacity="0.25" />
+            <Circle cx={wx2cx(closestX)} cy={wy2cy(closestY)} r="12" fill="#4CAF50" />
+          </G>
+
+          {/* ORANGE handle (angle) */}
+          <G {...endpointPanResponder.panHandlers}>
+            <Circle cx={wx2cx(lineEndX)} cy={wy2cy(lineEndY)} r="20" fill="#FF9800" opacity="0.25" />
+            <Circle cx={wx2cx(lineEndX)} cy={wy2cy(lineEndY)} r="12" fill="#FF9800" />
           </G>
         </Svg>
       </View>
@@ -120,20 +181,25 @@ export default function DraggableStraightLine({ parameters, onParametersChange }
         <View style={styles.infoRow}>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Distance (h)</Text>
-            <Text style={styles.infoValue}>{hValue.toFixed(1)} m</Text>
+            <Text style={styles.infoValue}>{h.toFixed(2)} m</Text>
           </View>
           <View style={styles.infoItem}>
             <Text style={styles.infoLabel}>Angle</Text>
-            <Text style={styles.infoValue}>{angleValue.toFixed(1)}°</Text>
+            <Text style={styles.infoValue}>{angleDeg.toFixed(2)}°</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Speed</Text>
+            <Text style={styles.infoValue}>{Number.isFinite(speed) ? speed.toFixed(2) : '--'} m/s</Text>
+          </View>
+          <View style={styles.infoItem}>
+            <Text style={styles.infoLabel}>Duration</Text>
+            <Text style={styles.infoValue}>{Number.isFinite(duration) ? duration.toFixed(2) : '--'} s</Text>
           </View>
         </View>
       </View>
 
       <View style={styles.hintContainer}>
-        <Text style={styles.hintIcon}>💡</Text>
-        <Text style={styles.hintText}>
-          Drag the green dot to adjust the vehicle's path. The vehicle moves along the blue line.
-        </Text>
+        <Text style={styles.hintText}>Green: Distance • Orange: Angle • Slider: Zoom</Text>
       </View>
     </View>
   );
@@ -155,9 +221,17 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 15,
+    marginBottom: 10,
     textAlign: 'center',
   },
+  sliderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  sliderLabel: { fontSize: 12, color: '#666', marginRight: 8, width: 40, textAlign: 'right' },
+  sliderValue: { fontSize: 12, color: '#333', marginLeft: 8, width: 50, textAlign: 'left' },
   canvasContainer: {
     backgroundColor: '#fafafa',
     borderRadius: 8,
@@ -166,44 +240,20 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   infoContainer: {
-    marginTop: 15,
-    paddingTop: 15,
+    marginTop: 12,
+    paddingTop: 12,
     borderTopWidth: 1,
     borderTopColor: '#e0e0e0',
   },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-  },
-  infoItem: {
-    alignItems: 'center',
-  },
-  infoLabel: {
-    fontSize: 12,
-    color: '#999',
-    marginBottom: 5,
-  },
-  infoValue: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#333',
-  },
+  infoRow: { flexDirection: 'row', justifyContent: 'space-around' },
+  infoItem: { alignItems: 'center' },
+  infoLabel: { fontSize: 12, color: '#999', marginBottom: 4 },
+  infoValue: { fontSize: 16, fontWeight: 'bold', color: '#333' },
   hintContainer: {
-    marginTop: 15,
+    marginTop: 10,
     backgroundColor: '#E3F2FD',
     borderRadius: 8,
-    padding: 12,
-    flexDirection: 'row',
-    alignItems: 'flex-start',
+    padding: 10,
   },
-  hintIcon: {
-    fontSize: 20,
-    marginRight: 10,
-  },
-  hintText: {
-    flex: 1,
-    fontSize: 13,
-    color: '#666',
-    lineHeight: 18,
-  },
+  hintText: { fontSize: 12, color: '#666', textAlign: 'center' },
 });
