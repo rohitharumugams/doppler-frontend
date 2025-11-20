@@ -40,9 +40,23 @@ export default function HomeScreen({ navigation }) {
     // Load vehicles
     const vehiclesResponse = await ApiService.getVehicles();
     if (vehiclesResponse.success) {
-      setVehicles(vehiclesResponse.data.vehicles);
-      if (vehiclesResponse.data.vehicles.length > 0) {
-        setSelectedVehicle(vehiclesResponse.data.vehicles[0]);
+      // Remove 'flight' entries and ensure 'drone' is present
+      let remoteVehicles = vehiclesResponse.data.vehicles || [];
+      // Filter out any flight entries
+      remoteVehicles = remoteVehicles.filter(v => v.id !== 'flight');
+
+      // If backend didn't provide drone, add a sensible default
+      if (!remoteVehicles.find(v => v.id === 'drone')) {
+        remoteVehicles.push({
+          id: 'drone',
+          name: 'Drone',
+          description: 'Multirotor UAV (hovering and agile)'
+        });
+      }
+
+      setVehicles(remoteVehicles);
+      if (remoteVehicles.length > 0) {
+        setSelectedVehicle(remoteVehicles[0]);
       }
     } else {
       Alert.alert('Error', 'Failed to load vehicle types');
@@ -74,7 +88,7 @@ export default function HomeScreen({ navigation }) {
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <Text style={styles.title}>🔊 Doppler Effect Simulator</Text>
+        <Text style={styles.title}>🔊 Doppler Effect Simulator Test</Text>
         <Text style={styles.subtitle}>Select Vehicle Type</Text>
 
         <View style={styles.vehicleContainer}>
@@ -89,7 +103,7 @@ export default function HomeScreen({ navigation }) {
             >
               <View style={styles.vehicleIcon}>
                 <Text style={styles.vehicleIconText}>
-                  {vehicle.id === 'car' ? '🚗' : vehicle.id === 'train' ? '🚂' : '✈️'}
+                  {vehicle.id === 'car' ? '🚗' : vehicle.id === 'train' ? '🚂' : vehicle.id === 'drone' ? '🚁' : '❓'}
                 </Text>
               </View>
               <View style={styles.vehicleInfo}>

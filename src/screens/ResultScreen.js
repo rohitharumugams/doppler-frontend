@@ -7,88 +7,74 @@ import {
   ScrollView,
   Alert
 } from 'react-native';
-import { Audio } from 'expo-av';
+import { useAudioPlayer } from 'expo-audio';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import ApiService from '../services/api';
 import PathVisualizer from '../components/PathVisualizer';
 
 export default function ResultScreen({ route, navigation }) {
   const { vehicle, path, parameters, result, jobId } = route.params;
   
-  const [sound, setSound] = useState(null);
+  const audioUrl = ApiService.getDownloadUrl(result.filename);
+  const player = useAudioPlayer({ uri: audioUrl });
+  
   const [isPlaying, setIsPlaying] = useState(false);
   const [position, setPosition] = useState(0);
   const [duration, setDuration] = useState(0);
   const [animationProgress, setAnimationProgress] = useState(0);
+  const [isDownloading, setIsDownloading] = useState(false);
 
   useEffect(() => {
-    loadAudio();
-    return () => {
-      if (sound) {
-        sound.unloadAsync();
+    const interval = setInterval(() => {
+      if (player.duration) {
+        setDuration(player.duration);
       }
+
+      if (player.playing) {
+        const currentPos = player.currentTime;
+        setPosition(currentPos);
+        setIsPlaying(true);
+        
+        if (player.duration > 0) {
+          setAnimationProgress(currentPos / player.duration);
+        }
+
+        if (currentPos >= player.duration && player.duration > 0) {
+          setIsPlaying(false);
+          setPosition(0);
+          setAnimationProgress(0);
+        }
+      } else {
+        setIsPlaying(false);
+      }
+    }, 50);
+
+    return () => {
+      clearInterval(interval);
+      player.remove();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const loadAudio = async () => {
-    try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        staysActiveInBackground: false,
-        shouldDuckAndroid: true,
-      });
-
-      const audioUrl = ApiService.getDownloadUrl(result.filename);
-      
-      const { sound: newSound } = await Audio.Sound.createAsync(
-        { uri: audioUrl },
-        { shouldPlay: false },
-        onPlaybackStatusUpdate
-      );
-      
-      await newSound.setProgressUpdateIntervalAsync(8); // or 33 for ~30fps
-      setSound(newSound);
-      
-      const status = await newSound.getStatusAsync();
-      if (status.isLoaded) {
-        setDuration(status.durationMillis / 1000);
-      }
-    } catch (error) {
-      Alert.alert('Error', 'Failed to load audio: ' + error.message);
-    }
-  };
-
-  const onPlaybackStatusUpdate = (status) => {
-    if (status.isLoaded) {
-      setPosition(status.positionMillis / 1000);
-      setIsPlaying(status.isPlaying);
-      if (status.durationMillis > 0) {
-        setAnimationProgress(status.positionMillis / status.durationMillis);
-      }
-      if (status.didJustFinish) {
-        setIsPlaying(false);
-        setPosition(0);
-        setAnimationProgress(0);
-      }
-    }
-  };
-
-  const playPauseAudio = async () => {
-    if (!sound) return;
-    if (isPlaying) {
-      await sound.pauseAsync();
+  const playPauseAudio = () => {
+    if (player.playing) {
+      player.pause();
     } else {
-      await sound.playAsync();
+      player.play();
     }
   };
 
-  const stopAudio = async () => {
-    if (!sound) return;
-    await sound.stopAsync();
-    await sound.setPositionAsync(0);
+  const stopAudio = () => {
+    player.pause();
+    player.seekTo(0);
     setPosition(0);
     setIsPlaying(false);
+    setAnimationProgress(0);
+  };
+
+  const restartAudio = () => {
+    player.seekTo(0);
+    setPosition(0);
     setAnimationProgress(0);
   };
 
@@ -98,10 +84,48 @@ export default function ResultScreen({ route, navigation }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const generateFileName = () => {
+    const vehicleName = vehicle?.name?.replace(/\s+/g, '_') || 'vehicle';
+    const speed = parameters?.speed || 20;
+    const audioDuration = parameters?.audio_duration || result?.duration || 5;
+    
+    return `${vehicleName}_${speed}ms_${audioDuration}s_audio.mp3`;
+  };
+
+  const downloadAudio = async () => {
+    try {
+      setIsDownloading(true);
+
+      const fileName = generateFileName();
+      const fileUri = FileSystem.documentDirectory + fileName;
+
+      const downloadResult = await FileSystem.downloadAsync(audioUrl, fileUri);
+
+      if (downloadResult.status === 200) {
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(downloadResult.uri, {
+            mimeType: 'audio/wav',
+            dialogTitle: 'Save Doppler Audio',
+            UTI: 'public.audio'
+          });
+          Alert.alert('Success', 'Audio ready to save!');
+        } else {
+          Alert.alert('Error', 'Sharing is not available on this device');
+        }
+      } else {
+        Alert.alert('Error', 'Failed to prepare audio file');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      Alert.alert('Error', `Failed to download audio: ${error.message}`);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
+
   return (
     <View style={styles.container}>
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {/* AUDIO PLAYER MOVED UP */}
         <View style={styles.playerContainer}>
           <Text style={styles.playerTitle}>🎵 Audio Player</Text>
 
@@ -150,19 +174,23 @@ export default function ResultScreen({ route, navigation }) {
 
             <TouchableOpacity 
               style={styles.controlButton}
-              onPress={() => {
-                if (sound) {
-                  sound.setPositionAsync(0);
-                  setAnimationProgress(0);
-                }
-              }}
+              onPress={restartAudio}
             >
               <Text style={styles.controlButtonText}>🔄</Text>
             </TouchableOpacity>
           </View>
+
+          <TouchableOpacity 
+            style={[styles.downloadButton, isDownloading && styles.downloadButtonDisabled]}
+            onPress={downloadAudio}
+            disabled={isDownloading}
+          >
+            <Text style={styles.downloadButtonText}>
+              {isDownloading ? '⏳ Preparing...' : '💾 Download MP3'}
+            </Text>
+          </TouchableOpacity>
         </View>
 
-        {/* VISUALIZER BELOW PLAYER */}
         <PathVisualizer 
           pathType={path.id} 
           parameters={parameters}
@@ -170,7 +198,6 @@ export default function ResultScreen({ route, navigation }) {
           animationProgress={animationProgress}
         />
 
-        {/* SIMULATION DETAILS (Vehicle/PathType removed) */}
         <View style={styles.detailsContainer}>
           <Text style={styles.detailsTitle}>📊 Simulation Details</Text>
 
@@ -198,7 +225,6 @@ export default function ResultScreen({ route, navigation }) {
           </Text>
         </View>
 
-        {/* No bottom New Simulation button; headerRight handles it */}
         <View style={{ height: 12 }} />
       </ScrollView>
     </View>
@@ -275,6 +301,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     gap: 20,
+    marginBottom: 16,
   },
   controlButton: {
     width: 50,
@@ -292,6 +319,21 @@ const styles = StyleSheet.create({
     backgroundColor: '#2196F3',
   },
   playButtonText: { fontSize: 32 },
+
+  downloadButton: {
+    backgroundColor: '#4CAF50',
+    padding: 14,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  downloadButtonDisabled: {
+    backgroundColor: '#9E9E9E',
+  },
+  downloadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 
   detailsContainer: {
     backgroundColor: '#fff',
