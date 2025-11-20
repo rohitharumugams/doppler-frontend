@@ -253,7 +253,7 @@ This project is part of a research internship at Carnegie Mellon University's La
 
 ## Author
 
-**Rohith**  
+**Rohith Arumugam Suresh**  
 Computer Science and Engineering  
 Sri Sivasubramaniya Nadar College of Engineering  
 Research Intern, Carnegie Mellon University
