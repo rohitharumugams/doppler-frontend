@@ -251,9 +251,9 @@ Build and install APK/IPA on physical devices for production testing.
 
 This project is part of a research internship at Carnegie Mellon University's Language Technologies Institute under Professor Bhiksha Raj.
 
-## Author
+## Authors
 
-**Rohith Arumugam Suresh**  
+**Rohith Arumugam Suresh, Seetharam Killivalavan**  
 Computer Science and Engineering  
 Sri Sivasubramaniya Nadar College of Engineering  
 Research Intern, Carnegie Mellon University
