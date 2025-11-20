@@ -261,7 +261,7 @@ Research Intern, Carnegie Mellon University
 ## Acknowledgments
 
 - Carnegie Mellon University, Language Technologies Institute
-- Professor Bhiksha Raj for research guidance
+- Professor Bhiksha Raj and Bradley Warren for research guidance
 - Doppler effect physics simulations based on acoustic wave theory
 
 ---
